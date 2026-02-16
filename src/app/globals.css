@@ -46,7 +46,8 @@ body {
   transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
   will-change: transform;
   max-height: 92vh;
-  touch-action: none;
+  display: flex;
+  flex-direction: column;
 }
 
 .bottom-sheet.dragging {
@@ -58,6 +59,7 @@ body {
   justify-content: center;
   padding: 10px 0 6px;
   cursor: grab;
+  touch-action: none;
 }
 
 .bottom-sheet-handle::after {
@@ -73,7 +75,7 @@ body {
 }
 
 .pb-safe {
-  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 @media (max-width: 767px) {

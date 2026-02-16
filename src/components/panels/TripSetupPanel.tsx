@@ -66,7 +66,7 @@ export default function TripSetupPanel() {
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4 pb-8 md:pb-4">
+    <div className="flex flex-col gap-4 p-4 pb-24 md:pb-4">
       <div>
         <h2 className="text-lg font-semibold text-stone-900">Plan Your Trip</h2>
         <p className="text-xs text-stone-400 mt-0.5">
