@@ -8,6 +8,8 @@ const MapInner = dynamic(() => import("./MapInner"), { ssr: false });
 
 export default function TripMap() {
   const route = useTripStore((s) => s.route);
+  const origin = useTripStore((s) => s.origin);
+  const destination = useTripStore((s) => s.destination);
   const scheduledStops = useTripStore((s) => s.scheduledStops);
   const recommendations = useTripStore((s) => s.recommendations);
 
@@ -20,6 +22,8 @@ export default function TripMap() {
       center={DEFAULT_MAP_CENTER}
       zoom={DEFAULT_MAP_ZOOM}
       route={route}
+      origin={origin}
+      destination={destination}
       scheduledStops={scheduledStops}
       recommendedStops={recommendedStops}
     />
