@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import PlaceAutocomplete from "@/components/ui/PlaceAutocomplete";
 import Select from "@/components/ui/Select";
 import { useUserStore } from "@/store/userStore";
 import { useTripStore } from "@/store/tripStore";
@@ -74,17 +75,17 @@ export default function TripSetupPanel() {
       </div>
 
       <div className="flex flex-col gap-3">
-        <Input
+        <PlaceAutocomplete
           label="Starting Point"
-          placeholder="Enter origin address..."
+          placeholder="Search for a starting point..."
           value={originInput}
-          onChange={(e) => setOriginInput(e.target.value)}
+          onChange={setOriginInput}
         />
-        <Input
+        <PlaceAutocomplete
           label="Destination"
-          placeholder="Enter destination address..."
+          placeholder="Search for a destination..."
           value={destinationInput}
-          onChange={(e) => setDestinationInput(e.target.value)}
+          onChange={setDestinationInput}
         />
       </div>
 
