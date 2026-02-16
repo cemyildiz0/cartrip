@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, LocateFixed } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import PlaceAutocomplete from "@/components/ui/PlaceAutocomplete";
@@ -21,6 +21,7 @@ export default function TripSetupPanel() {
   const [destinationInput, setDestinationInput] = useState("");
   const [showVehicle, setShowVehicle] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
 
   const vehicle = useUserStore((s) => s.vehicle);
   const preferences = useUserStore((s) => s.preferences);
@@ -30,6 +31,39 @@ export default function TripSetupPanel() {
 
   const isLoadingRoute = useTripStore((s) => s.isLoadingRoute);
   const routeError = useTripStore((s) => s.routeError);
+
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      useTripStore.getState().setRouteError("Geolocation is not supported by your browser.");
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const res = await fetch(
+            `/api/places/geocode?lat=${latitude}&lng=${longitude}`,
+          );
+          const data = await res.json();
+          if (data.address) {
+            setOriginInput(data.address);
+          } else {
+            useTripStore.getState().setRouteError("Could not determine your address.");
+          }
+        } catch {
+          useTripStore.getState().setRouteError("Failed to get your location address.");
+        } finally {
+          setIsLocating(false);
+        }
+      },
+      () => {
+        setIsLocating(false);
+        useTripStore.getState().setRouteError("Location access denied. Please enable location permissions.");
+      },
+    );
+  };
 
   const handlePlanTrip = async () => {
     if (!originInput.trim() || !destinationInput.trim()) return;
@@ -75,12 +109,23 @@ export default function TripSetupPanel() {
       </div>
 
       <div className="flex flex-col gap-3">
-        <PlaceAutocomplete
-          label="Starting Point"
-          placeholder="Search for a starting point..."
-          value={originInput}
-          onChange={setOriginInput}
-        />
+        <div>
+          <PlaceAutocomplete
+            label="Starting Point"
+            placeholder="Search for a starting point..."
+            value={originInput}
+            onChange={setOriginInput}
+          />
+          <button
+            type="button"
+            onClick={handleUseCurrentLocation}
+            disabled={isLocating}
+            className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <LocateFixed className="h-3.5 w-3.5" />
+            {isLocating ? "Getting location..." : "Use current location"}
+          </button>
+        </div>
         <PlaceAutocomplete
           label="Destination"
           placeholder="Search for a destination..."
