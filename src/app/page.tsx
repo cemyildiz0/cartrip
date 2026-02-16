@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import TripMap from "@/components/map/TripMap";
 import TripSetupPanel from "@/components/panels/TripSetupPanel";
@@ -16,8 +16,15 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<SidebarTab>("setup");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const status = useTripStore((s) => s.status);
+  const activePanel = useTripStore((s) => s.activePanel);
   const recommendations = useTripStore((s) => s.recommendations);
   const activeRecCount = recommendations.filter((r) => !r.dismissed).length;
+
+  useEffect(() => {
+    if (activePanel === "setup" || activePanel === "overview" || activePanel === "recommendation") {
+      setActiveTab(activePanel === "recommendation" ? "recommendations" : activePanel);
+    }
+  }, [activePanel]);
 
   const tabs: { id: SidebarTab; label: string }[] = [
     { id: "setup", label: "Setup" },

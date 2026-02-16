@@ -94,6 +94,7 @@ export default function TripSetupPanel() {
         latLng: data.route.legs[data.route.legs.length - 1].endLocation,
         address: destinationInput,
       });
+      useTripStore.getState().setActivePanel("overview");
     } catch {
       useTripStore.getState().setRouteError("Failed to plan route");
     }

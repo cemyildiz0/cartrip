@@ -23,8 +23,15 @@ export default function MobileBottomSheet() {
   const startHeight = useRef(0);
 
   const status = useTripStore((s) => s.status);
+  const activePanel = useTripStore((s) => s.activePanel);
   const recommendations = useTripStore((s) => s.recommendations);
   const activeRecCount = recommendations.filter((r) => !r.dismissed).length;
+
+  useEffect(() => {
+    if (activePanel === "setup" || activePanel === "overview" || activePanel === "recommendation") {
+      setActiveTab(activePanel === "recommendation" ? "recommendations" : activePanel);
+    }
+  }, [activePanel]);
 
   const isOpen = sheetHeight > SNAP_PEEK + 0.02;
 
