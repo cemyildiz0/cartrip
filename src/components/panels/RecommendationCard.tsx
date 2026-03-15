@@ -5,7 +5,7 @@ import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import { useTripStore } from "@/store/tripStore";
 import { formatDistance, formatPriceLevel, formatRating } from "@/lib/utils";
-import type { Recommendation, Stop, StopCategory } from "@/types";
+import type { Recommendation, Stop, ScoredStop, StopCategory } from "@/types";
 
 const categoryIcon: Record<StopCategory, React.ReactNode> = {
   fuel: <Fuel className="h-3.5 w-3.5" />,
@@ -21,6 +21,10 @@ const categoryLabel: Record<StopCategory, string> = {
   hotel: "Hotel",
 };
 
+function isScoredStop(stop: Stop): stop is ScoredStop {
+  return "score" in stop;
+}
+
 interface RecommendationCardProps {
   recommendation: Recommendation;
 }
@@ -32,6 +36,8 @@ export default function RecommendationCard({
   const acceptRecommendation = useTripStore((s) => s.acceptRecommendation);
 
   if (recommendation.dismissed) return null;
+
+  const displayStops = recommendation.scoredStops ?? recommendation.stops;
 
   return (
     <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
@@ -54,7 +60,7 @@ export default function RecommendationCard({
       </div>
 
       <div className="divide-y divide-stone-50">
-        {recommendation.stops.slice(0, 3).map((stop, index) => (
+        {displayStops.slice(0, 3).map((stop, index) => (
           <StopOption
             key={stop.id}
             stop={stop}
@@ -79,6 +85,9 @@ function StopOption({
   isAccepted: boolean;
   onAccept: () => void;
 }) {
+  const scored = isScoredStop(stop);
+  const matchPercent = scored ? Math.round(stop.score * 100) : null;
+
   return (
     <div
       className={`flex items-center gap-3 px-4 py-3.5 md:py-3 transition-colors ${
@@ -90,9 +99,17 @@ function StopOption({
       </span>
 
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-stone-800 truncate">
-          {stop.name}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-stone-800 truncate">
+            {stop.name}
+          </p>
+          {matchPercent !== null && (
+            <span className="shrink-0 rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">
+              {matchPercent}%
+            </span>
+          )}
+        </div>
+
         <div className="flex items-center gap-2 mt-0.5 text-xs text-stone-400">
           {stop.rating !== null && (
             <span className="flex items-center gap-0.5">
@@ -108,6 +125,19 @@ function StopOption({
             <span>+{Math.round(stop.detourDurationMinutes)}m</span>
           )}
         </div>
+
+        {scored && stop.matchReasons.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {stop.matchReasons.slice(0, 3).map((reason, i) => (
+              <span
+                key={i}
+                className="rounded-md bg-stone-100 px-1.5 py-0.5 text-[10px] text-stone-500"
+              >
+                {reason}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {isAccepted ? (

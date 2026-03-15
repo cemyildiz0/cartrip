@@ -150,6 +150,7 @@ export interface Recommendation {
   trigger: RecommendationTrigger;
   triggerReason: string;
   stops: Stop[];
+  scoredStops?: ScoredStop[];
   timestamp: Date;
   dismissed: boolean;
   acceptedStopId: string | null;
@@ -196,4 +197,69 @@ export interface PlacesApiResponse {
 export interface WeatherApiResponse {
   weather: WeatherData | null;
   error: string | null;
+}
+
+// --- Scoring Types ---
+
+export interface ScoredStop extends Stop {
+  score: number;
+  scoreBreakdown: ScoreBreakdown;
+  matchReasons: string[];
+}
+
+export interface ScoreBreakdown {
+  distance: number;
+  routeProximity: number;
+  preferenceMatch: number;
+  rating: number;
+  priceAlignment: number;
+  timeRelevance: number;
+  brandPreference: number;
+  weatherSuitability: number;
+}
+
+export interface CategoryWeights {
+  distance: number;
+  routeProximity: number;
+  preferenceMatch: number;
+  rating: number;
+  priceAlignment: number;
+  timeRelevance: number;
+  brandPreference: number;
+  weatherSuitability: number;
+}
+
+// --- TF-IDF Types ---
+
+export interface TfIdfDocument {
+  stopId: string;
+  terms: string[];
+  tfVector: Map<string, number>;
+}
+
+export interface TfIdfCorpus {
+  documents: TfIdfDocument[];
+  idfVector: Map<string, number>;
+  vocabulary: Set<string>;
+}
+
+// --- Simulation Types ---
+
+export interface SimulationState {
+  isRunning: boolean;
+  speed: number;
+  simulatedTime: Date;
+  positionIndex: number;
+  routePoints: LatLng[];
+}
+
+export interface SimulationTick {
+  position: LatLng;
+  segmentIndex: number;
+  elapsedMinutes: number;
+  fuelRemaining: number;
+  distanceTraveledMiles: number;
+  simulatedTime: Date;
+  shouldFetchPlaces: boolean;
+  triggers: RecommendationTrigger[];
 }

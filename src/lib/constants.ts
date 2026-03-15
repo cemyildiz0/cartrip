@@ -119,3 +119,14 @@ export const GAS_STATION_BRANDS = [
   "Speedway",
   "Circle K",
 ] as const;
+
+// --- Scoring & Route Constants ---
+
+export const ROUTE_CORRIDOR_WIDTH_MILES = 5;
+export const WEATHER_CHECK_INTERVAL_MILES = 20;
+export const SIMULATION_TICK_MS = 100;
+export const PLACE_FETCH_THRESHOLD_MILES = 5;
+export const SIMULATION_AVG_SPEED_MPH = 60;
+
+// Minimum minutes since last stop before re-triggering meal recommendation
+export const MEAL_RETRIGGER_COOLDOWN_MINUTES = 30;

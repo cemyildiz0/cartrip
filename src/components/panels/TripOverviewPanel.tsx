@@ -11,6 +11,7 @@ import {
   formatDuration,
 } from "@/lib/utils";
 import { STOP_CATEGORY_CONFIG } from "@/lib/constants";
+import SimulationControls from "./SimulationControls";
 import type { StopCategory } from "@/types";
 
 export default function TripOverviewPanel() {
@@ -76,6 +77,8 @@ export default function TripOverviewPanel() {
           <span>~{formatDistance(remainingRange)} range</span>
         </div>
       </Card>
+
+      {status === "active" && <SimulationControls />}
 
       {status === "active" && (
         <Card className="bg-brand-50 border-brand-200">

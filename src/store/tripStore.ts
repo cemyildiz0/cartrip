@@ -8,6 +8,7 @@ import type {
   StopCategory,
   TripContext,
   TripStatus,
+  SimulationState,
 } from "@/types";
 import { generateId, getTimeOfDay } from "@/lib/utils";
 
@@ -23,6 +24,8 @@ interface TripState {
   recommendations: Recommendation[];
   activePanel: "setup" | "overview" | "recommendation" | null;
   selectedRecommendationId: string | null;
+  simulation: SimulationState | null;
+  simulationIntervalId: number | null;
 }
 
 interface TripActions {
@@ -48,11 +51,16 @@ interface TripActions {
     triggerReason: string,
     stops: Stop[],
   ) => void;
+  addRecommendations: (recs: Recommendation[]) => void;
   dismissRecommendation: (recommendationId: string) => void;
   acceptRecommendation: (recommendationId: string, stopId: string) => void;
   clearRecommendations: () => void;
   setActivePanel: (panel: TripState["activePanel"]) => void;
   setSelectedRecommendation: (id: string | null) => void;
+  setSimulation: (sim: SimulationState | null) => void;
+  setSimulationInterval: (id: number | null) => void;
+  setSimulationSpeed: (speed: number) => void;
+  stopSimulation: () => void;
 }
 
 const initialContext: TripContext = {
@@ -79,6 +87,8 @@ export const useTripStore = create<TripState & TripActions>()((set, get) => ({
   recommendations: [],
   activePanel: "setup",
   selectedRecommendationId: null,
+  simulation: null,
+  simulationIntervalId: null,
 
   setOrigin: (location) => set({ origin: location }),
   setDestination: (location) => set({ destination: location }),
@@ -110,7 +120,9 @@ export const useTripStore = create<TripState & TripActions>()((set, get) => ({
   resumeTrip: () => set({ status: "active" }),
   endTrip: () => set({ status: "completed", activePanel: null }),
 
-  resetTrip: () =>
+  resetTrip: () => {
+    const { simulationIntervalId } = get();
+    if (simulationIntervalId) clearInterval(simulationIntervalId);
     set({
       status: "planning",
       origin: null,
@@ -123,7 +135,10 @@ export const useTripStore = create<TripState & TripActions>()((set, get) => ({
       recommendations: [],
       activePanel: "setup",
       selectedRecommendationId: null,
-    }),
+      simulation: null,
+      simulationIntervalId: null,
+    });
+  },
 
   updatePosition: (position) =>
     set((state) => ({
@@ -191,8 +206,34 @@ export const useTripStore = create<TripState & TripActions>()((set, get) => ({
       };
     }),
 
+  addRecommendations: (recs) =>
+    set((state) => ({
+      recommendations: [...state.recommendations, ...recs],
+      activePanel: recs.length > 0 ? "recommendation" : state.activePanel,
+    })),
+
   clearRecommendations: () => set({ recommendations: [] }),
 
   setActivePanel: (panel) => set({ activePanel: panel }),
   setSelectedRecommendation: (id) => set({ selectedRecommendationId: id }),
+
+  setSimulation: (sim) => set({ simulation: sim }),
+
+  setSimulationInterval: (id) => set({ simulationIntervalId: id }),
+
+  setSimulationSpeed: (speed) =>
+    set((state) => ({
+      simulation: state.simulation ? { ...state.simulation, speed } : null,
+    })),
+
+  stopSimulation: () => {
+    const { simulationIntervalId } = get();
+    if (simulationIntervalId) clearInterval(simulationIntervalId);
+    set((state) => ({
+      simulation: state.simulation
+        ? { ...state.simulation, isRunning: false }
+        : null,
+      simulationIntervalId: null,
+    }));
+  },
 }));

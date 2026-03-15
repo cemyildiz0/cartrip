@@ -6,7 +6,13 @@ import RecommendationCard from "./RecommendationCard";
 
 export default function RecommendationsPanel() {
   const recommendations = useTripStore((s) => s.recommendations);
-  const activeRecommendations = recommendations.filter((r) => !r.dismissed);
+  const activeRecommendations = recommendations
+    .filter((r) => !r.dismissed)
+    .sort((a, b) => {
+      const scoreA = a.scoredStops?.[0]?.score ?? 0;
+      const scoreB = b.scoredStops?.[0]?.score ?? 0;
+      return scoreB - scoreA;
+    });
 
   if (activeRecommendations.length === 0) {
     return (
