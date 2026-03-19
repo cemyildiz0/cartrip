@@ -13,6 +13,7 @@ import {
   CUISINE_OPTIONS,
   DIETARY_OPTIONS,
   GAS_STATION_BRANDS,
+  HOTEL_AMENITY_OPTIONS,
 } from "@/lib/constants";
 import type { BudgetLevel, FuelType } from "@/types";
 
@@ -28,6 +29,7 @@ export default function TripSetupPanel() {
   const setVehicle = useUserStore((s) => s.setVehicle);
   const setPreferences = useUserStore((s) => s.setPreferences);
   const setDiningPreferences = useUserStore((s) => s.setDiningPreferences);
+  const setLodgingPreferences = useUserStore((s) => s.setLodgingPreferences);
 
   const isLoadingRoute = useTripStore((s) => s.isLoadingRoute);
   const routeError = useTripStore((s) => s.routeError);
@@ -94,6 +96,7 @@ export default function TripSetupPanel() {
         latLng: data.route.legs[data.route.legs.length - 1].endLocation,
         address: destinationInput,
       });
+      useTripStore.getState().setRouteLoading(false);
       useTripStore.getState().setActivePanel("overview");
     } catch {
       useTripStore.getState().setRouteError("Failed to plan route");
@@ -372,6 +375,62 @@ export default function TripSetupPanel() {
                     }}
                   >
                     {brand}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Select
+              label="Lodging Budget"
+              value={preferences.lodging.budgetLevel}
+              onChange={(e) =>
+                setLodgingPreferences({
+                  budgetLevel: e.target.value as BudgetLevel,
+                })
+              }
+              options={Object.entries(BUDGET_LABELS).map(([value, label]) => ({
+                value,
+                label,
+              }))}
+            />
+
+            <Input
+              label="Min Star Rating"
+              type="number"
+              value={preferences.lodging.minStarRating}
+              onChange={(e) =>
+                setLodgingPreferences({
+                  minStarRating: Number(e.target.value),
+                })
+              }
+              min={1}
+              max={5}
+              step={1}
+            />
+
+            <div>
+              <label className="text-xs font-medium text-stone-600 mb-1.5 block">
+                Hotel Amenities
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {HOTEL_AMENITY_OPTIONS.map((amenity) => (
+                  <button
+                    key={amenity}
+                    type="button"
+                    className={`rounded-full px-3 py-1.5 md:px-2.5 md:py-1 text-xs font-medium transition-colors ${
+                      preferences.lodging.amenities.includes(amenity)
+                        ? "bg-brand-100 text-brand-700 border border-brand-200"
+                        : "bg-stone-50 text-stone-500 border border-stone-200 hover:bg-stone-100 hover:text-stone-600"
+                    }`}
+                    onClick={() => {
+                      const current = preferences.lodging.amenities;
+                      const updated = current.includes(amenity)
+                        ? current.filter((a) => a !== amenity)
+                        : [...current, amenity];
+                      setLodgingPreferences({ amenities: updated });
+                    }}
+                  >
+                    {amenity}
                   </button>
                 ))}
               </div>

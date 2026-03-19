@@ -20,32 +20,45 @@ export interface SimulationConfig {
   route: RouteData;
   vehicle: VehicleProfile;
   preferences: UserPreferences;
-  speedMultiplier: number;
+  speedRef: { current: number };
   startTime: Date;
+  resumeState?: {
+    positionIndex: number;
+    distanceTraveledMiles: number;
+    elapsedMinutes: number;
+    fuelRemaining: number;
+  };
 }
 
 export interface Simulation {
   tick: () => SimulationTick;
   isComplete: () => boolean;
   getRoutePoints: () => LatLng[];
+  getState: () => {
+    positionIndex: number;
+    distanceTraveledMiles: number;
+    elapsedMinutes: number;
+    fuelRemaining: number;
+  };
+  refuel: (level: number) => void;
 }
 
 export function createSimulation(config: SimulationConfig): Simulation {
   const routePoints = decodePolyline(config.route.polyline);
   const totalPoints = routePoints.length;
 
-  let positionIndex = 0;
-  let distanceTraveledMiles = 0;
-  let elapsedMinutes = 0;
-  let fuelRemaining = config.vehicle.currentFuelLevel;
-  let lastFetchDistance = 0;
-  let simulatedTime = new Date(config.startTime);
+  let positionIndex = config.resumeState?.positionIndex ?? 0;
+  let distanceTraveledMiles = config.resumeState?.distanceTraveledMiles ?? 0;
+  let elapsedMinutes = config.resumeState?.elapsedMinutes ?? 0;
+  let fuelRemaining = config.resumeState?.fuelRemaining ?? config.vehicle.currentFuelLevel;
+  let lastFetchDistance = distanceTraveledMiles;
+  let simulatedTime = new Date(config.startTime.getTime() + elapsedMinutes * 60 * 1000);
 
   const fuelConsumptionPerMile = 1 / config.vehicle.fuelEfficiencyMpg / config.vehicle.tankCapacityGallons;
 
   function tick(): SimulationTick {
     const realSecondsPerTick = SIMULATION_TICK_MS / 1000;
-    const simMinutesPerTick = (realSecondsPerTick * config.speedMultiplier * 60) / 60;
+    const simMinutesPerTick = (realSecondsPerTick * config.speedRef.current * 60) / 60;
     const simMilesPerTick = (SIMULATION_AVG_SPEED_MPH / 60) * simMinutesPerTick;
 
     let milesThisTick = 0;
@@ -56,7 +69,9 @@ export function createSimulation(config: SimulationConfig): Simulation {
     }
 
     distanceTraveledMiles += milesThisTick;
-    elapsedMinutes += simMinutesPerTick;
+    // Use actual distance for elapsed time (not fixed simMinutesPerTick)
+    // to avoid undercounting when polyline segments overshoot the target
+    elapsedMinutes += (milesThisTick / SIMULATION_AVG_SPEED_MPH) * 60;
     fuelRemaining = Math.max(0, fuelRemaining - milesThisTick * fuelConsumptionPerMile);
     simulatedTime = new Date(config.startTime.getTime() + elapsedMinutes * 60 * 1000);
 
@@ -90,7 +105,15 @@ export function createSimulation(config: SimulationConfig): Simulation {
     return routePoints;
   }
 
-  return { tick, isComplete, getRoutePoints };
+  function getState() {
+    return { positionIndex, distanceTraveledMiles, elapsedMinutes, fuelRemaining };
+  }
+
+  function refuel(level: number) {
+    fuelRemaining = level;
+  }
+
+  return { tick, isComplete, getRoutePoints, getState, refuel };
 }
 
 function detectSimTriggers(

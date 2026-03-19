@@ -16,6 +16,12 @@ import {
   FUEL_WARNING_THRESHOLD,
   MEAL_TIMES,
   MEAL_RETRIGGER_COOLDOWN_MINUTES,
+  MIN_MEAL_SPACING_MINUTES,
+  MIN_DRIVING_BEFORE_MEAL_MINUTES,
+  MIN_DRIVING_BEFORE_HOTEL_MINUTES,
+  HOTEL_MIN_REMAINING_DISTANCE_MILES,
+  HOTEL_RETRIGGER_COOLDOWN_MINUTES,
+  CATEGORY_MAX_DETOUR_MILES,
 } from "./constants";
 import { scoreAndRankStops } from "./scoring";
 
@@ -27,6 +33,7 @@ export interface RecommendationInput {
   routeData: RouteData | null;
   weather: WeatherData | null;
   currentTime?: Date;
+  safetyBufferPercent?: number;
   stops: {
     gasStations: Stop[];
     restaurants: Stop[];
@@ -41,16 +48,28 @@ interface DetectedTrigger {
   reason: string;
 }
 
+function getMealSlotForHour(hour: number): "breakfast" | "lunch" | "dinner" | null {
+  for (const [mealName, window] of Object.entries(MEAL_TIMES)) {
+    if (hour >= window.start && hour <= window.end) {
+      return mealName as "breakfast" | "lunch" | "dinner";
+    }
+  }
+  return null;
+}
+
 function detectTriggers(
   tripContext: TripContext,
   preferences: UserPreferences,
   weather: WeatherData | null,
   currentTime: Date,
+  safetyBufferPercent = 0.2,
 ): DetectedTrigger[] {
   const triggers: DetectedTrigger[] = [];
   const hour = currentTime.getHours();
 
-  if (tripContext.estimatedFuelRemaining <= FUEL_WARNING_THRESHOLD) {
+  // Trigger when fuel drops to safety buffer + 10% margin to allow time for the async fetch
+  const fuelThreshold = Math.max(FUEL_WARNING_THRESHOLD, safetyBufferPercent + 0.10);
+  if (tripContext.estimatedFuelRemaining <= fuelThreshold) {
     triggers.push({
       trigger: "low_fuel",
       category: "fuel",
@@ -58,30 +77,56 @@ function detectTriggers(
     });
   }
 
-  if (tripContext.elapsedDrivingMinutes >= preferences.restFrequencyMinutes) {
+  if (tripContext.minutesSinceLastStop >= preferences.restFrequencyMinutes) {
     triggers.push({
       trigger: "driving_duration",
       category: "rest",
-      reason: `You've been driving for ${Math.round(tripContext.elapsedDrivingMinutes)} minutes`,
+      reason: `You've been driving for ${Math.round(tripContext.minutesSinceLastStop)} minutes without a break`,
     });
   }
 
-  const cooldownMet = tripContext.minutesSinceLastStop >= MEAL_RETRIGGER_COOLDOWN_MINUTES;
-  if (cooldownMet) {
-    for (const [mealName, window] of Object.entries(MEAL_TIMES)) {
-      if (hour >= window.start && hour <= window.end) {
-        triggers.push({
-          trigger: "meal_time",
-          category: "restaurant",
-          reason: `It's ${mealName} time — here are some nearby options`,
-        });
-        break;
-      }
-    }
+  // Only apply meal cooldown after a stop has been taken (prevents re-triggering).
+  // Before any stops, always allow meal recs when in a meal window.
+  const currentMealSlot = getMealSlotForHour(hour);
+  const minutesSinceLastMeal = tripContext.lastMealTime
+    ? (currentTime.getTime() - tripContext.lastMealTime.getTime()) / 60000
+    : Number.POSITIVE_INFINITY;
+  const mealCooldownMet = !tripContext.lastStopTime ||
+    tripContext.minutesSinceLastStop >= MEAL_RETRIGGER_COOLDOWN_MINUTES;
+  const mealSpacingMet = minutesSinceLastMeal >= MIN_MEAL_SPACING_MINUTES;
+  const enoughDrivingForMeal = tripContext.elapsedDrivingMinutes >= MIN_DRIVING_BEFORE_MEAL_MINUTES;
+  const sameMealAlreadyTaken = tripContext.lastMealSlot === currentMealSlot && minutesSinceLastMeal < 18 * 60;
+
+  if (
+    currentMealSlot &&
+    mealCooldownMet &&
+    mealSpacingMet &&
+    enoughDrivingForMeal &&
+    !sameMealAlreadyTaken &&
+    tripContext.lastStopCategory !== "restaurant"
+  ) {
+    triggers.push({
+      trigger: "meal_time",
+      category: "restaurant",
+      reason: `It's ${currentMealSlot} time — here are some nearby options`,
+    });
   }
 
   const isNight = hour >= EVENING_LODGING_HOUR || tripContext.timeOfDay === "night";
-  if (isNight) {
+  const minutesSinceLastHotel = tripContext.lastHotelTime
+    ? (currentTime.getTime() - tripContext.lastHotelTime.getTime()) / 60000
+    : Number.POSITIVE_INFINITY;
+  const hotelCooldownMet = minutesSinceLastHotel >= HOTEL_RETRIGGER_COOLDOWN_MINUTES;
+  const enoughDrivingForHotel = tripContext.elapsedDrivingMinutes >= MIN_DRIVING_BEFORE_HOTEL_MINUTES;
+  const hotelStillMakesSense = tripContext.estimatedMilesRemaining >= HOTEL_MIN_REMAINING_DISTANCE_MILES;
+
+  if (
+    isNight &&
+    hotelCooldownMet &&
+    enoughDrivingForHotel &&
+    hotelStillMakesSense &&
+    tripContext.lastStopCategory !== "hotel"
+  ) {
     triggers.push({
       trigger: "evening_lodging",
       category: "hotel",
@@ -137,6 +182,17 @@ function getStopsForCategory(
   }
 }
 
+function computeDetourDistances(
+  currentPosition: LatLng,
+  stops: Stop[],
+): Stop[] {
+  return stops.map((s) => ({
+    ...s,
+    detourDistanceMiles: haversineDistance(currentPosition, s.location.latLng),
+    detourDurationMinutes: (haversineDistance(currentPosition, s.location.latLng) / 40) * 60,
+  }));
+}
+
 function filterByFuelRange(
   currentPosition: LatLng,
   stops: Stop[],
@@ -145,6 +201,24 @@ function filterByFuelRange(
   return stops.filter(
     (s) => haversineDistance(currentPosition, s.location.latLng) <= fuelRangeMiles,
   );
+}
+
+function filterStopsForRealism(category: StopCategory, stops: Stop[]): Stop[] {
+  const maxDetour = CATEGORY_MAX_DETOUR_MILES[category];
+
+  return stops.filter((stop) => {
+    if (stop.openNow === false) return false;
+    if (stop.detourDistanceMiles > maxDetour) return false;
+
+    if (category === "restaurant") {
+      const waitMinutes = stop.attributes.category === "restaurant"
+        ? stop.attributes.estimatedWaitMinutes
+        : null;
+      if (waitMinutes !== null && waitMinutes > 45) return false;
+    }
+
+    return true;
+  });
 }
 
 export function getRecommendations(input: RecommendationInput): Recommendation[] {
@@ -161,38 +235,56 @@ export function getRecommendations(input: RecommendationInput): Recommendation[]
   const routePoints = getRoutePoints(routeData);
   const now = input.currentTime ?? new Date();
 
-  const triggers = detectTriggers(tripContext, preferences, weather, now);
+  const triggers = detectTriggers(tripContext, preferences, weather, now, input.safetyBufferPercent);
 
-  if (triggers.length === 0 && stops.gasStations.length > 0) {
-    triggers.push({
-      trigger: "user_request",
-      category: "fuel",
-      reason: "Nearby gas stations",
-    });
-  }
+  if (triggers.length === 0) return [];
 
   const recommendations: Recommendation[] = [];
 
   const seen = new Set<StopCategory>();
 
-  for (const { trigger, category, reason } of triggers) {
+  for (const { trigger, category: triggerCategory, reason } of triggers) {
+    let category = triggerCategory;
     if (seen.has(category)) continue;
-    seen.add(category);
 
-    const categoryStops = getStopsForCategory(category, stops);
+    let rawStops = getStopsForCategory(category, stops);
+
+    // Rest stops are rarely indexed in Google Places — fall back to restaurants
+    if (rawStops.length === 0 && category === "rest") {
+      category = "restaurant";
+      if (seen.has(category)) continue;
+      rawStops = getStopsForCategory(category, stops);
+    }
+
+    seen.add(category);
+    if (rawStops.length === 0) continue;
+
+    const categoryStops = filterStopsForRealism(
+      category,
+      computeDetourDistances(currentPosition, rawStops),
+    );
     if (categoryStops.length === 0) continue;
 
-    const reachable = filterByFuelRange(currentPosition, categoryStops, fuelRangeMiles);
-    if (reachable.length === 0) continue;
+    // Only filter by fuel range for gas stations — other categories shouldn't be
+    // gated by remaining fuel since the driver can still reach nearby places
+    const candidates =
+      category === "fuel"
+        ? filterByFuelRange(currentPosition, categoryStops, Math.max(fuelRangeMiles, 10))
+        : categoryStops;
+    if (candidates.length === 0) continue;
+
+    const maxDist = category === "fuel"
+      ? Math.max(Math.min(fuelRangeMiles, CATEGORY_MAX_DETOUR_MILES.fuel), 3)
+      : CATEGORY_MAX_DETOUR_MILES[category];
 
     const scoredStops = scoreAndRankStops({
-      stops: reachable,
+      stops: candidates,
       category,
       preferences,
       currentPosition,
       routePoints,
       currentSegmentIndex: tripContext.currentSegmentIndex,
-      maxDistanceMiles: fuelRangeMiles,
+      maxDistanceMiles: maxDist,
       currentTime: now,
       weather,
     });

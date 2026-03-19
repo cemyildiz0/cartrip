@@ -7,8 +7,21 @@ import { useUserStore } from "@/store/userStore";
 import { createSimulation, type Simulation } from "@/lib/simulation";
 import { getRecommendations } from "@/lib/recommendation";
 import { calculateRemainingRange, getTimeOfDay, formatDuration } from "@/lib/utils";
-import { SIMULATION_TICK_MS } from "@/lib/constants";
-import { useRef, useCallback } from "react";
+import {
+  SIMULATION_TICK_MS,
+  FUEL_WARNING_THRESHOLD,
+  MEAL_TIMES,
+  MEAL_RETRIGGER_COOLDOWN_MINUTES,
+  EVENING_LODGING_HOUR,
+  PLACE_FETCH_THRESHOLD_MILES,
+  MIN_MEAL_SPACING_MINUTES,
+  MIN_DRIVING_BEFORE_MEAL_MINUTES,
+  MIN_DRIVING_BEFORE_HOTEL_MINUTES,
+  HOTEL_MIN_REMAINING_DISTANCE_MILES,
+  HOTEL_RETRIGGER_COOLDOWN_MINUTES,
+} from "@/lib/constants";
+import type { WeatherData } from "@/types";
+import { useCallback, useEffect } from "react";
 
 const SPEED_OPTIONS = [
   { value: "1", label: "1x" },
@@ -17,19 +30,39 @@ const SPEED_OPTIONS = [
   { value: "50", label: "50x" },
 ];
 
-async function fetchPlacesForPosition(lat: number, lng: number) {
+// Module-level refs survive component unmount/remount (e.g. when switching tabs)
+let simRef: Simulation | null = null;
+const speedRef = { current: 10 };
+let isFetchingRef = false;
+let lastTriggeredFetchMiles = 0;
+let hotelRecommendedThisNight = false;
+
+function getMealSlotForHour(hour: number): "breakfast" | "lunch" | "dinner" | null {
+  for (const [mealName, window] of Object.entries(MEAL_TIMES)) {
+    if (hour >= window.start && hour <= window.end) {
+      return mealName as "breakfast" | "lunch" | "dinner";
+    }
+  }
+  return null;
+}
+
+async function fetchPlacesAndWeather(lat: number, lng: number) {
   const radius = 8047;
-  const [fuelRes, restRes, hotelRes, restaurantRes] = await Promise.all([
+  const [fuelRes, restRes, hotelRes, restaurantRes, weatherRes] = await Promise.all([
     fetch(`/api/places?lat=${lat}&lng=${lng}&category=fuel&radius=${radius}`).then((r) => r.json()).catch(() => ({ stops: [] })),
     fetch(`/api/places?lat=${lat}&lng=${lng}&category=rest&radius=${radius}`).then((r) => r.json()).catch(() => ({ stops: [] })),
     fetch(`/api/places?lat=${lat}&lng=${lng}&category=hotel&radius=${radius}`).then((r) => r.json()).catch(() => ({ stops: [] })),
     fetch(`/api/places?lat=${lat}&lng=${lng}&category=restaurant&radius=${radius}`).then((r) => r.json()).catch(() => ({ stops: [] })),
+    fetch(`/api/weather?lat=${lat}&lng=${lng}`).then((r) => r.json()).catch(() => ({ weather: null })),
   ]);
   return {
-    gasStations: fuelRes.stops ?? [],
-    restStops: restRes.stops ?? [],
-    hotels: hotelRes.stops ?? [],
-    restaurants: restaurantRes.stops ?? [],
+    stops: {
+      gasStations: fuelRes.stops ?? [],
+      restStops: restRes.stops ?? [],
+      hotels: hotelRes.stops ?? [],
+      restaurants: restaurantRes.stops ?? [],
+    },
+    weather: (weatherRes.weather as WeatherData) ?? null,
   };
 }
 
@@ -43,42 +76,74 @@ export default function SimulationControls() {
   const updateContext = useTripStore((s) => s.updateContext);
   const addRecommendations = useTripStore((s) => s.addRecommendations);
   const clearRecommendations = useTripStore((s) => s.clearRecommendations);
+  const simPausedForRecs = useTripStore((s) => s.simPausedForRecs);
+  const simShouldResume = useTripStore((s) => s.simShouldResume);
+  const clearSimShouldResume = useTripStore((s) => s.clearSimShouldResume);
   const vehicle = useUserStore((s) => s.vehicle);
   const preferences = useUserStore((s) => s.preferences);
 
-  const simRef = useRef<Simulation | null>(null);
-  const speedRef = useRef(10);
-  const isFetchingRef = useRef(false);
+  // simRef, speedRef, isFetchingRef are module-level (above)
 
-  const startSim = useCallback(() => {
+  const startSim = useCallback((resume = false) => {
     if (!route) return;
+
+    // Prevent double-start
+    const currentState = useTripStore.getState();
+    if (currentState.simulationIntervalId) return;
+
+    const resumeState = resume && simRef
+      ? simRef.getState()
+      : undefined;
+
+    // Set lastTriggeredFetchMiles so we don't re-trigger immediately on resume
+    if (resumeState) {
+      lastTriggeredFetchMiles = resumeState.distanceTraveledMiles;
+    }
 
     const sim = createSimulation({
       route,
       vehicle,
       preferences,
-      speedMultiplier: speedRef.current,
+      speedRef,
       startTime: new Date(),
+      resumeState,
     });
-    simRef.current = sim;
+    simRef = sim;
 
     const routePoints = sim.getRoutePoints();
     setSimulation({
       isRunning: true,
       speed: speedRef.current,
       simulatedTime: new Date(),
-      positionIndex: 0,
+      positionIndex: resumeState?.positionIndex ?? 0,
       routePoints,
     });
 
     const intervalId = window.setInterval(() => {
-      const currentSim = simRef.current;
+      const currentSim = simRef;
       if (!currentSim || currentSim.isComplete()) {
         useTripStore.getState().stopSimulation();
+        useTripStore.getState().endTrip();
         return;
       }
 
+      // Freeze sim while fetching — prevents advancing during async API call
+      if (isFetchingRef) return;
+
+      // Sync refuel from store (user accepted a gas station)
+      const storeFuel = useTripStore.getState().context.estimatedFuelRemaining;
+      const simState = currentSim.getState();
+      if (storeFuel > simState.fuelRemaining + 0.01) {
+        currentSim.refuel(storeFuel);
+      }
+
       const tick = currentSim.tick();
+
+      const prevContext = useTripStore.getState().context;
+      const lastStopTime = prevContext.lastStopTime;
+      const minutesSinceLastStop = lastStopTime
+        ? (tick.simulatedTime.getTime() - lastStopTime.getTime()) / 60000
+        : tick.elapsedMinutes;
 
       updateContext({
         currentPosition: tick.position,
@@ -86,8 +151,9 @@ export default function SimulationControls() {
         elapsedDrivingMinutes: tick.elapsedMinutes,
         estimatedFuelRemaining: tick.fuelRemaining,
         distanceTraveledMiles: tick.distanceTraveledMiles,
+        estimatedMilesRemaining: Math.max(0, (route?.totalDistanceMiles ?? 0) - tick.distanceTraveledMiles),
         timeOfDay: getTimeOfDay(tick.simulatedTime),
-        minutesSinceLastStop: tick.elapsedMinutes,
+        minutesSinceLastStop,
       });
 
       setSimulation({
@@ -98,50 +164,110 @@ export default function SimulationControls() {
         routePoints,
       });
 
-      if (tick.shouldFetchPlaces && tick.triggers.length > 0 && !isFetchingRef.current) {
-        isFetchingRef.current = true;
-        const fuelRange = calculateRemainingRange({
-          ...vehicle,
-          currentFuelLevel: tick.fuelRemaining,
-        });
+      // Check triggers synchronously — only fetch when conditions warrant a stop
+      const distSinceLastFetch = tick.distanceTraveledMiles - lastTriggeredFetchMiles;
+      const hour = tick.simulatedTime.getHours();
 
-        fetchPlacesForPosition(tick.position.lat, tick.position.lng)
-          .then((stops) => {
-            const state = useTripStore.getState();
-            const recs = getRecommendations({
-              currentPosition: tick.position,
-              fuelRangeMiles: fuelRange,
-              tripContext: {
-                ...state.context,
-                currentPosition: tick.position,
-                estimatedFuelRemaining: tick.fuelRemaining,
-                elapsedDrivingMinutes: tick.elapsedMinutes,
-              },
-              preferences,
-              routeData: route,
-              weather: null,
-              currentTime: tick.simulatedTime,
-              stops,
-            });
+      // Reset hotel flag when daytime returns (new night = new chance)
+      if (hour >= 5 && hour < EVENING_LODGING_HOUR) {
+        hotelRecommendedThisNight = false;
+      }
 
-            if (recs.length > 0) {
-              addRecommendations(recs);
-            }
-          })
-          .finally(() => {
-            isFetchingRef.current = false;
+      if (distSinceLastFetch >= PLACE_FETCH_THRESHOLD_MILES) {
+        const fuelThreshold = Math.max(FUEL_WARNING_THRESHOLD, vehicle.safetyBufferPercent + 0.10);
+        const currentContext = useTripStore.getState().context;
+        const currentMealSlot = getMealSlotForHour(hour);
+        const minutesSinceLastMeal = currentContext.lastMealTime
+          ? (tick.simulatedTime.getTime() - currentContext.lastMealTime.getTime()) / 60000
+          : Number.POSITIVE_INFINITY;
+        const minutesSinceLastHotel = currentContext.lastHotelTime
+          ? (tick.simulatedTime.getTime() - currentContext.lastHotelTime.getTime()) / 60000
+          : Number.POSITIVE_INFINITY;
+        const mealCooldownMet =
+          !lastStopTime || minutesSinceLastStop >= MEAL_RETRIGGER_COOLDOWN_MINUTES;
+        const shouldAskForMeal = Boolean(
+          currentMealSlot &&
+          mealCooldownMet &&
+          minutesSinceLastMeal >= MIN_MEAL_SPACING_MINUTES &&
+          tick.elapsedMinutes >= MIN_DRIVING_BEFORE_MEAL_MINUTES &&
+          currentContext.lastStopCategory !== "restaurant" &&
+          !(currentContext.lastMealSlot === currentMealSlot && minutesSinceLastMeal < 18 * 60),
+        );
+        const shouldAskForHotel =
+          hour >= EVENING_LODGING_HOUR &&
+          !hotelRecommendedThisNight &&
+          minutesSinceLastHotel >= HOTEL_RETRIGGER_COOLDOWN_MINUTES &&
+          tick.elapsedMinutes >= MIN_DRIVING_BEFORE_HOTEL_MINUTES &&
+          currentContext.estimatedMilesRemaining >= HOTEL_MIN_REMAINING_DISTANCE_MILES &&
+          currentContext.lastStopCategory !== "hotel";
+
+        const hasTrigger =
+          tick.fuelRemaining <= fuelThreshold ||
+          minutesSinceLastStop >= preferences.restFrequencyMinutes ||
+          shouldAskForMeal ||
+          shouldAskForHotel;
+
+        if (hasTrigger) {
+          lastTriggeredFetchMiles = tick.distanceTraveledMiles;
+          isFetchingRef = true; // Freezes sim on next tick
+
+          const fuelRange = calculateRemainingRange({
+            ...vehicle,
+            currentFuelLevel: tick.fuelRemaining,
           });
+
+          fetchPlacesAndWeather(tick.position.lat, tick.position.lng)
+            .then(({ stops, weather }) => {
+              const recs = getRecommendations({
+                currentPosition: tick.position,
+                fuelRangeMiles: fuelRange,
+                tripContext: {
+                  ...useTripStore.getState().context,
+                  currentPosition: tick.position,
+                  estimatedFuelRemaining: tick.fuelRemaining,
+                },
+                preferences,
+                routeData: route,
+                weather,
+                currentTime: tick.simulatedTime,
+                safetyBufferPercent: vehicle.safetyBufferPercent,
+                stops,
+              });
+
+              if (recs.length > 0) {
+                if (recs.some((r) => r.category === "hotel")) {
+                  hotelRecommendedThisNight = true;
+                }
+                addRecommendations(recs);
+              }
+            })
+            .finally(() => {
+              isFetchingRef = false;
+            });
+        }
       }
     }, SIMULATION_TICK_MS);
 
     setSimulationInterval(intervalId);
   }, [route, vehicle, preferences, setSimulation, setSimulationInterval, updateContext, addRecommendations]);
 
+  // Auto-resume: the store sets simShouldResume when all recs in the batch are resolved
+  useEffect(() => {
+    if (simShouldResume) {
+      clearSimShouldResume();
+      startSim(true);
+    }
+  }, [simShouldResume, clearSimShouldResume, startSim]);
+
   const toggleSim = useCallback(() => {
     if (simulation?.isRunning) {
       stopSimulation();
     } else {
-      startSim();
+      // Clear rec-pause state when manually playing
+      if (useTripStore.getState().simPausedForRecs) {
+        useTripStore.setState({ simPausedForRecs: false, simShouldResume: false });
+      }
+      startSim(!!simRef);
     }
   }, [simulation, stopSimulation, startSim]);
 
@@ -149,16 +275,25 @@ export default function SimulationControls() {
     stopSimulation();
     clearRecommendations();
     setSimulation(null);
-    simRef.current = null;
+    simRef = null;
+    lastTriggeredFetchMiles = 0;
+    hotelRecommendedThisNight = false;
+    useTripStore.setState({ simPausedForRecs: false, simShouldResume: false });
     updateContext({
       elapsedDrivingMinutes: 0,
       estimatedFuelRemaining: vehicle.currentFuelLevel,
       distanceTraveledMiles: 0,
+      estimatedMilesRemaining: route?.totalDistanceMiles ?? 0,
       currentPosition: null,
       currentSegmentIndex: 0,
       minutesSinceLastStop: 0,
+      lastStopTime: null,
+      lastStopCategory: null,
+      lastMealTime: null,
+      lastMealSlot: null,
+      lastHotelTime: null,
     });
-  }, [stopSimulation, clearRecommendations, setSimulation, updateContext, vehicle]);
+  }, [stopSimulation, clearRecommendations, setSimulation, updateContext, vehicle, route]);
 
   if (!route) return null;
 
@@ -179,12 +314,18 @@ export default function SimulationControls() {
         )}
       </div>
 
-      <div className="w-full bg-stone-200 rounded-full h-1.5 mb-3">
+      <div className="w-full bg-stone-200 rounded-full h-1.5 mb-2">
         <div
           className="bg-brand-500 h-1.5 rounded-full transition-all duration-200"
           style={{ width: `${progress}%` }}
         />
       </div>
+
+      {simPausedForRecs && (
+        <p className="text-xs text-amber-600 mb-2">
+          Paused — review recommendations to continue
+        </p>
+      )}
 
       <div className="flex items-center gap-2">
         <Button

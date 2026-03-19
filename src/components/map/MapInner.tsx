@@ -1,6 +1,6 @@
 "use client";
 
-import { MapContainer, TileLayer, Marker, Tooltip, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Tooltip, CircleMarker, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import type { LatLng, Location, RouteData, Stop } from "@/types";
 import RouteOverlay from "./RouteOverlay";
@@ -37,6 +37,7 @@ interface MapInnerProps {
   destination: Location | null;
   scheduledStops: Stop[];
   recommendedStops: Stop[];
+  currentPosition: LatLng | null;
 }
 
 function FitRouteBounds({ route }: { route: RouteData | null }) {
@@ -63,6 +64,7 @@ export default function MapInner({
   destination,
   scheduledStops,
   recommendedStops,
+  currentPosition,
 }: MapInnerProps) {
   const originIcon = useMemo(() => createPinIcon("#16a34a"), []);
   const destinationIcon = useMemo(() => createPinIcon("#dc2626"), []);
@@ -106,6 +108,22 @@ export default function MapInner({
       )}
       <StopMarkers stops={scheduledStops} type="scheduled" />
       <StopMarkers stops={recommendedStops} type="recommended" />
+      {currentPosition && (
+        <CircleMarker
+          center={[currentPosition.lat, currentPosition.lng]}
+          radius={8}
+          pathOptions={{
+            fillColor: "#3b82f6",
+            fillOpacity: 1,
+            color: "#ffffff",
+            weight: 3,
+          }}
+        >
+          <Tooltip direction="top" offset={[0, -10]}>
+            <span className="text-xs font-medium">Current Position</span>
+          </Tooltip>
+        </CircleMarker>
+      )}
     </MapContainer>
   );
 }

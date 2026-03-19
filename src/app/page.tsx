@@ -90,9 +90,13 @@ export default function Home() {
                     "h-1.5 w-1.5 rounded-full",
                     status === "active"
                       ? "bg-emerald-500"
-                      : status === "planning"
-                        ? "bg-amber-400"
-                        : "bg-stone-300",
+                      : status === "paused"
+                        ? "bg-blue-400"
+                        : status === "planning"
+                          ? "bg-amber-400"
+                          : status === "completed"
+                            ? "bg-violet-500"
+                            : "bg-stone-300",
                   )}
                 />
                 <span className="capitalize">{status}</span>

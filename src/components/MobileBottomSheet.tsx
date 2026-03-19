@@ -10,9 +10,9 @@ import { cn } from "@/lib/utils";
 
 type MobileTab = "setup" | "overview" | "recommendations";
 
-const SNAP_PEEK = 0.08; // Just tab bar visible
-const SNAP_HALF = 0.5; // Half screen
-const SNAP_FULL = 0.92; // Near full screen
+const SNAP_PEEK = 0.08;
+const SNAP_HALF = 0.5;
+const SNAP_FULL = 0.92;
 
 export default function MobileBottomSheet() {
   const [activeTab, setActiveTab] = useState<MobileTab>("setup");
@@ -209,9 +209,13 @@ export default function MobileBottomSheet() {
                 "h-1.5 w-1.5 rounded-full",
                 status === "active"
                   ? "bg-emerald-500"
-                  : status === "planning"
-                    ? "bg-amber-400"
-                    : "bg-stone-300",
+                  : status === "paused"
+                    ? "bg-blue-400"
+                    : status === "planning"
+                      ? "bg-amber-400"
+                      : status === "completed"
+                        ? "bg-violet-500"
+                        : "bg-stone-300",
               )}
             />
             <span className="capitalize">{status}</span>

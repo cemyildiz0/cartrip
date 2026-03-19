@@ -1,24 +1,16 @@
 "use client";
 
-import { Fuel, Hotel, Star, TreePine, UtensilsCrossed, X } from "lucide-react";
-import Button from "@/components/ui/Button";
-import Badge from "@/components/ui/Badge";
+import { Fuel, Hotel, Star, TreePine, UtensilsCrossed, X, Plus, Check } from "lucide-react";
 import { useTripStore } from "@/store/tripStore";
-import { formatDistance, formatPriceLevel, formatRating } from "@/lib/utils";
+import { formatDistance, formatPriceLevel, cn } from "@/lib/utils";
+import { STOP_CATEGORY_CONFIG } from "@/lib/constants";
 import type { Recommendation, Stop, ScoredStop, StopCategory } from "@/types";
 
 const categoryIcon: Record<StopCategory, React.ReactNode> = {
-  fuel: <Fuel className="h-3.5 w-3.5" />,
-  restaurant: <UtensilsCrossed className="h-3.5 w-3.5" />,
-  rest: <TreePine className="h-3.5 w-3.5" />,
-  hotel: <Hotel className="h-3.5 w-3.5" />,
-};
-
-const categoryLabel: Record<StopCategory, string> = {
-  fuel: "Gas Station",
-  restaurant: "Restaurant",
-  rest: "Rest Stop",
-  hotel: "Hotel",
+  fuel: <Fuel className="h-3 w-3" />,
+  restaurant: <UtensilsCrossed className="h-3 w-3" />,
+  rest: <TreePine className="h-3 w-3" />,
+  hotel: <Hotel className="h-3 w-3" />,
 };
 
 function isScoredStop(stop: Stop): stop is ScoredStop {
@@ -38,114 +30,129 @@ export default function RecommendationCard({
   if (recommendation.dismissed) return null;
 
   const displayStops = recommendation.scoredStops ?? recommendation.stops;
+  const config = STOP_CATEGORY_CONFIG[recommendation.category];
+  const hasAccepted = recommendation.acceptedStopId !== null;
 
   return (
-    <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-stone-100">
-        <Badge variant={recommendation.category}>
+    <div className={cn(
+      "rounded-lg border bg-white overflow-hidden transition-colors",
+      hasAccepted ? "border-brand-200 bg-brand-50/30" : "border-stone-200",
+    )}>
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-stone-100">
+        <span
+          className="flex h-5 w-5 items-center justify-center rounded text-white"
+          style={{ backgroundColor: config.color }}
+        >
           {categoryIcon[recommendation.category]}
-          {categoryLabel[recommendation.category]}
-        </Badge>
+        </span>
+        <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-wide flex-1">
+          {config.label}
+        </span>
+        <span className="text-[10px] text-stone-400 mr-1">
+          {recommendation.triggerReason}
+        </span>
         <button
           onClick={() => dismissRecommendation(recommendation.id)}
-          className="rounded-full p-1 text-stone-300 hover:bg-stone-100 hover:text-stone-500 transition-colors"
+          className="rounded p-0.5 text-stone-300 hover:text-stone-500 transition-colors"
           aria-label="Dismiss"
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="h-3 w-3" />
         </button>
       </div>
 
-      <div className="px-4 py-2 text-xs text-amber-700 bg-amber-50/50 border-b border-stone-100">
-        {recommendation.triggerReason}
-      </div>
-
-      <div className="divide-y divide-stone-50">
-        {displayStops.slice(0, 3).map((stop, index) => (
-          <StopOption
-            key={stop.id}
-            stop={stop}
-            rank={index + 1}
-            isAccepted={recommendation.acceptedStopId === stop.id}
-            onAccept={() => acceptRecommendation(recommendation.id, stop.id)}
-          />
-        ))}
-      </div>
+      {displayStops.slice(0, 3).map((stop, index) => (
+        <StopRow
+          key={stop.id}
+          stop={stop}
+          rank={index + 1}
+          categoryColor={config.color}
+          isAccepted={recommendation.acceptedStopId === stop.id}
+          onAccept={() => acceptRecommendation(recommendation.id, stop.id)}
+          showDivider={index > 0}
+        />
+      ))}
     </div>
   );
 }
 
-function StopOption({
+function StopRow({
   stop,
   rank,
+  categoryColor,
   isAccepted,
   onAccept,
+  showDivider,
 }: {
   stop: Stop;
   rank: number;
+  categoryColor: string;
   isAccepted: boolean;
   onAccept: () => void;
+  showDivider: boolean;
 }) {
   const scored = isScoredStop(stop);
   const matchPercent = scored ? Math.round(stop.score * 100) : null;
+  const matchReasons = scored ? stop.matchReasons.slice(0, 2).join(" • ") : null;
 
   return (
     <div
-      className={`flex items-center gap-3 px-4 py-3.5 md:py-3 transition-colors ${
-        isAccepted ? "bg-brand-50" : "hover:bg-stone-50 active:bg-stone-100"
-      }`}
+      className={cn(
+        "flex items-center gap-2 px-3 py-1.5",
+        showDivider && "border-t border-stone-50",
+        isAccepted && "bg-brand-50/50",
+      )}
     >
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-stone-100 text-[10px] font-bold text-stone-500">
+      <span
+        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white"
+        style={{ backgroundColor: categoryColor, opacity: 1 - (rank - 1) * 0.15 }}
+      >
         {rank}
       </span>
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-medium text-stone-800 truncate">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-xs font-medium text-stone-800">
             {stop.name}
-          </p>
+          </span>
           {matchPercent !== null && (
-            <span className="shrink-0 rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">
+            <span className="shrink-0 text-[10px] font-semibold text-stone-400 tabular-nums">
               {matchPercent}%
             </span>
           )}
         </div>
-
-        <div className="flex items-center gap-2 mt-0.5 text-xs text-stone-400">
-          {stop.rating !== null && (
-            <span className="flex items-center gap-0.5">
-              <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
-              {formatRating(stop.rating)}
-            </span>
-          )}
-          {stop.priceLevel !== null && (
-            <span>{formatPriceLevel(stop.priceLevel)}</span>
-          )}
-          <span>{formatDistance(stop.detourDistanceMiles)} detour</span>
-          {stop.detourDurationMinutes > 0 && (
-            <span>+{Math.round(stop.detourDurationMinutes)}m</span>
-          )}
-        </div>
-
-        {scored && stop.matchReasons.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1.5">
-            {stop.matchReasons.slice(0, 3).map((reason, i) => (
-              <span
-                key={i}
-                className="rounded-md bg-stone-100 px-1.5 py-0.5 text-[10px] text-stone-500"
-              >
-                {reason}
-              </span>
-            ))}
-          </div>
+        {matchReasons && (
+          <p className="truncate text-[10px] text-stone-500">
+            {matchReasons}
+          </p>
         )}
       </div>
 
+      <div className="flex items-center gap-1 shrink-0 text-[10px] text-stone-400">
+        {stop.rating !== null && (
+          <span className="flex items-center gap-0.5">
+            <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />
+            {stop.rating.toFixed(1)}
+          </span>
+        )}
+        {stop.priceLevel !== null && (
+          <span>{formatPriceLevel(stop.priceLevel)}</span>
+        )}
+        <span className="text-stone-300">·</span>
+        <span>{formatDistance(stop.detourDistanceMiles)}</span>
+      </div>
+
       {isAccepted ? (
-        <Badge variant="success">Added</Badge>
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-brand-600 text-white">
+          <Check className="h-3 w-3" />
+        </span>
       ) : (
-        <Button size="sm" variant="ghost" onClick={onAccept}>
-          Add
-        </Button>
+        <button
+          onClick={onAccept}
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-stone-200 text-stone-400 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50 transition-colors"
+          aria-label="Add stop"
+        >
+          <Plus className="h-3 w-3" />
+        </button>
       )}
     </div>
   );

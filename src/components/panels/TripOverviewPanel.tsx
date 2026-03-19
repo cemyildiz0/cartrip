@@ -1,6 +1,6 @@
 "use client";
 
-import { Route, Trash2 } from "lucide-react";
+import { Route, Trash2, CheckCircle2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import { useTripStore } from "@/store/tripStore";
@@ -23,6 +23,9 @@ export default function TripOverviewPanel() {
   const scheduledStops = useTripStore((s) => s.scheduledStops);
   const removeScheduledStop = useTripStore((s) => s.removeScheduledStop);
   const startTrip = useTripStore((s) => s.startTrip);
+  const pauseTrip = useTripStore((s) => s.pauseTrip);
+  const resumeTrip = useTripStore((s) => s.resumeTrip);
+  const endTrip = useTripStore((s) => s.endTrip);
   const resetTrip = useTripStore((s) => s.resetTrip);
   const vehicle = useUserStore((s) => s.vehicle);
 
@@ -78,9 +81,9 @@ export default function TripOverviewPanel() {
         </div>
       </Card>
 
-      {status === "active" && <SimulationControls />}
+      {(status === "active" || status === "paused") && <SimulationControls />}
 
-      {status === "active" && (
+      {(status === "active" || status === "paused") && (
         <Card className="bg-brand-50 border-brand-200">
           <h3 className="text-xs font-semibold text-brand-800 uppercase tracking-wide mb-2">
             Live Trip Data
@@ -165,6 +168,64 @@ export default function TripOverviewPanel() {
         <Button onClick={startTrip} size="lg" className="w-full mt-auto">
           Start Trip
         </Button>
+      )}
+
+      {(status === "active" || status === "paused") && (
+        <div className="flex gap-2 mt-auto">
+          <Button
+            onClick={status === "active" ? pauseTrip : resumeTrip}
+            size="lg"
+            variant="outline"
+            className="flex-1"
+          >
+            {status === "active" ? "Pause Trip" : "Resume Trip"}
+          </Button>
+          <Button onClick={endTrip} size="lg" variant="ghost" className="flex-1">
+            End Trip
+          </Button>
+        </div>
+      )}
+
+      {status === "completed" && (
+        <>
+          <Card className="bg-emerald-50 border-emerald-200">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              <h3 className="text-sm font-semibold text-emerald-800">
+                Trip Complete
+              </h3>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <span className="text-emerald-600">Total Distance</span>
+                <p className="font-semibold text-emerald-900 mt-0.5">
+                  {formatDistance(context.distanceTraveledMiles)}
+                </p>
+              </div>
+              <div>
+                <span className="text-emerald-600">Total Time</span>
+                <p className="font-semibold text-emerald-900 mt-0.5">
+                  {formatDuration(context.elapsedDrivingMinutes)}
+                </p>
+              </div>
+              <div>
+                <span className="text-emerald-600">Stops Made</span>
+                <p className="font-semibold text-emerald-900 mt-0.5">
+                  {scheduledStops.length}
+                </p>
+              </div>
+              <div>
+                <span className="text-emerald-600">Fuel Used</span>
+                <p className="font-semibold text-emerald-900 mt-0.5">
+                  {(context.distanceTraveledMiles / vehicle.fuelEfficiencyMpg).toFixed(1)} gal
+                </p>
+              </div>
+            </div>
+          </Card>
+          <Button onClick={resetTrip} size="lg" className="w-full mt-auto">
+            Plan New Trip
+          </Button>
+        </>
       )}
     </div>
   );

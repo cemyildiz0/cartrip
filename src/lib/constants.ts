@@ -34,6 +34,16 @@ export const MEAL_TIMES = {
 export const EVENING_LODGING_HOUR = 20;
 export const MAX_DETOUR_MILES = 5;
 export const RECOMMENDATIONS_PER_CATEGORY = 3;
+export const MIN_MEAL_SPACING_MINUTES = 180;
+export const MIN_DRIVING_BEFORE_MEAL_MINUTES = 150;
+export const MIN_DRIVING_BEFORE_HOTEL_MINUTES = 480;
+export const HOTEL_MIN_REMAINING_DISTANCE_MILES = 120;
+export const CATEGORY_MAX_DETOUR_MILES = {
+  fuel: 6,
+  restaurant: 3,
+  rest: 4,
+  hotel: 8,
+} as const;
 
 export const DEFAULT_VEHICLE: VehicleProfile = {
   name: "",
@@ -120,13 +130,11 @@ export const GAS_STATION_BRANDS = [
   "Circle K",
 ] as const;
 
-// --- Scoring & Route Constants ---
-
 export const ROUTE_CORRIDOR_WIDTH_MILES = 5;
 export const WEATHER_CHECK_INTERVAL_MILES = 20;
 export const SIMULATION_TICK_MS = 100;
-export const PLACE_FETCH_THRESHOLD_MILES = 5;
+export const PLACE_FETCH_THRESHOLD_MILES = 20;
 export const SIMULATION_AVG_SPEED_MPH = 60;
 
-// Minimum minutes since last stop before re-triggering meal recommendation
-export const MEAL_RETRIGGER_COOLDOWN_MINUTES = 30;
+export const MEAL_RETRIGGER_COOLDOWN_MINUTES = 60;
+export const HOTEL_RETRIGGER_COOLDOWN_MINUTES = 480;

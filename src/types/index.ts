@@ -144,6 +144,8 @@ export type RecommendationTrigger =
   | "traffic_delay"
   | "user_request";
 
+export type MealSlot = "breakfast" | "lunch" | "dinner";
+
 export interface Recommendation {
   id: string;
   category: StopCategory;
@@ -166,6 +168,10 @@ export interface TripContext {
   timeOfDay: "morning" | "midday" | "afternoon" | "evening" | "night";
   lastStopTime: Date | null;
   minutesSinceLastStop: number;
+  lastStopCategory: StopCategory | null;
+  lastMealTime: Date | null;
+  lastMealSlot: MealSlot | null;
+  lastHotelTime: Date | null;
 }
 
 export interface WeatherData {
@@ -199,8 +205,6 @@ export interface WeatherApiResponse {
   error: string | null;
 }
 
-// --- Scoring Types ---
-
 export interface ScoredStop extends Stop {
   score: number;
   scoreBreakdown: ScoreBreakdown;
@@ -229,8 +233,6 @@ export interface CategoryWeights {
   weatherSuitability: number;
 }
 
-// --- TF-IDF Types ---
-
 export interface TfIdfDocument {
   stopId: string;
   terms: string[];
@@ -242,8 +244,6 @@ export interface TfIdfCorpus {
   idfVector: Map<string, number>;
   vocabulary: Set<string>;
 }
-
-// --- Simulation Types ---
 
 export interface SimulationState {
   isRunning: boolean;

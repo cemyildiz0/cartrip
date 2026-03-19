@@ -26,6 +26,8 @@ interface TripState {
   selectedRecommendationId: string | null;
   simulation: SimulationState | null;
   simulationIntervalId: number | null;
+  simPausedForRecs: boolean;
+  simShouldResume: boolean;
 }
 
 interface TripActions {
@@ -61,6 +63,7 @@ interface TripActions {
   setSimulationInterval: (id: number | null) => void;
   setSimulationSpeed: (speed: number) => void;
   stopSimulation: () => void;
+  clearSimShouldResume: () => void;
 }
 
 const initialContext: TripContext = {
@@ -73,7 +76,15 @@ const initialContext: TripContext = {
   timeOfDay: getTimeOfDay(new Date()),
   lastStopTime: null,
   minutesSinceLastStop: 0,
+  lastStopCategory: null,
+  lastMealTime: null,
+  lastMealSlot: null,
+  lastHotelTime: null,
 };
+
+function hasUnresolvedRecs(recommendations: Recommendation[]): boolean {
+  return recommendations.some((r) => !r.dismissed && !r.acceptedStopId);
+}
 
 export const useTripStore = create<TripState & TripActions>()((set, get) => ({
   status: "planning",
@@ -89,6 +100,8 @@ export const useTripStore = create<TripState & TripActions>()((set, get) => ({
   selectedRecommendationId: null,
   simulation: null,
   simulationIntervalId: null,
+  simPausedForRecs: false,
+  simShouldResume: false,
 
   setOrigin: (location) => set({ origin: location }),
   setDestination: (location) => set({ destination: location }),
@@ -118,7 +131,18 @@ export const useTripStore = create<TripState & TripActions>()((set, get) => ({
 
   pauseTrip: () => set({ status: "paused" }),
   resumeTrip: () => set({ status: "active" }),
-  endTrip: () => set({ status: "completed", activePanel: null }),
+  endTrip: () => {
+    const { simulationIntervalId } = get();
+    if (simulationIntervalId) clearInterval(simulationIntervalId);
+    set({
+      status: "completed",
+      activePanel: "overview",
+      simulation: null,
+      simulationIntervalId: null,
+      simPausedForRecs: false,
+      simShouldResume: false,
+    });
+  },
 
   resetTrip: () => {
     const { simulationIntervalId } = get();
@@ -137,6 +161,8 @@ export const useTripStore = create<TripState & TripActions>()((set, get) => ({
       selectedRecommendationId: null,
       simulation: null,
       simulationIntervalId: null,
+      simPausedForRecs: false,
+      simShouldResume: false,
     });
   },
 
@@ -185,32 +211,90 @@ export const useTripStore = create<TripState & TripActions>()((set, get) => ({
       activePanel: "recommendation",
     })),
 
-  dismissRecommendation: (recommendationId) =>
-    set((state) => ({
-      recommendations: state.recommendations.map((r) =>
-        r.id === recommendationId ? { ...r, dismissed: true } : r,
-      ),
-    })),
+  dismissRecommendation: (recommendationId) => {
+    const state = get();
+    const updated = state.recommendations.map((r) =>
+      r.id === recommendationId ? { ...r, dismissed: true } : r,
+    );
+    const shouldResume = state.simPausedForRecs && !hasUnresolvedRecs(updated);
+    set({
+      recommendations: updated,
+      ...(shouldResume
+        ? { simPausedForRecs: false, simShouldResume: true }
+        : {}),
+    });
+  },
 
-  acceptRecommendation: (recommendationId, stopId) =>
-    set((state) => {
-      const rec = state.recommendations.find((r) => r.id === recommendationId);
-      const acceptedStop = rec?.stops.find((s) => s.id === stopId);
-      return {
-        recommendations: state.recommendations.map((r) =>
-          r.id === recommendationId ? { ...r, acceptedStopId: stopId } : r,
-        ),
-        scheduledStops: acceptedStop
-          ? [...state.scheduledStops, acceptedStop]
-          : state.scheduledStops,
-      };
-    }),
+  acceptRecommendation: (recommendationId, stopId) => {
+    const state = get();
+    const rec = state.recommendations.find((r) => r.id === recommendationId);
+    const acceptedStop = rec?.stops.find((s) => s.id === stopId);
+    const isFuelStop = rec?.category === "fuel";
+    const acceptedAt = state.simulation?.simulatedTime ?? new Date();
+    const updated = state.recommendations.map((r) =>
+      r.id === recommendationId ? { ...r, acceptedStopId: stopId } : r,
+    );
+    // Auto-dismiss remaining unresolved recs in the batch
+    const finalRecs = updated.map((r) =>
+      !r.dismissed && !r.acceptedStopId ? { ...r, dismissed: true } : r,
+    );
+    set({
+      recommendations: finalRecs,
+      scheduledStops: acceptedStop
+        ? [...state.scheduledStops, acceptedStop]
+        : state.scheduledStops,
+      context: {
+        ...state.context,
+        // Every accepted stop counts as a break — reset driving timer
+        lastStopTime: acceptedAt,
+        minutesSinceLastStop: 0,
+        lastStopCategory: rec?.category ?? state.context.lastStopCategory,
+        ...(rec?.category === "restaurant"
+          ? {
+              lastMealTime: acceptedAt,
+              lastMealSlot:
+                acceptedAt.getHours() < 11
+                  ? "breakfast"
+                  : acceptedAt.getHours() < 15
+                    ? "lunch"
+                    : "dinner",
+            }
+          : {}),
+        ...(rec?.category === "hotel"
+          ? {
+              lastHotelTime: acceptedAt,
+            }
+          : {}),
+        ...(isFuelStop ? { estimatedFuelRemaining: 1.0 } : {}),
+      },
+      activePanel: "overview",
+      simPausedForRecs: false,
+      simShouldResume: true,
+    });
+  },
 
-  addRecommendations: (recs) =>
-    set((state) => ({
-      recommendations: [...state.recommendations, ...recs],
-      activePanel: recs.length > 0 ? "recommendation" : state.activePanel,
-    })),
+  addRecommendations: (recs) => {
+    const state = get();
+    if (recs.length === 0) return;
+    // Pause simulation while user reviews recommendations
+    if (state.simulationIntervalId) {
+      clearInterval(state.simulationIntervalId);
+    }
+    // Dismiss ALL old active recs so only the current batch matters for resume
+    const updated = state.recommendations.map((r) =>
+      !r.dismissed && !r.acceptedStopId ? { ...r, dismissed: true } : r,
+    );
+    set({
+      recommendations: [...updated, ...recs],
+      activePanel: "recommendation",
+      simulation: state.simulation
+        ? { ...state.simulation, isRunning: false }
+        : null,
+      simulationIntervalId: null,
+      simPausedForRecs: true,
+      simShouldResume: false,
+    });
+  },
 
   clearRecommendations: () => set({ recommendations: [] }),
 
@@ -225,6 +309,9 @@ export const useTripStore = create<TripState & TripActions>()((set, get) => ({
     set((state) => ({
       simulation: state.simulation ? { ...state.simulation, speed } : null,
     })),
+
+  clearSimShouldResume: () =>
+    set({ simShouldResume: false }),
 
   stopSimulation: () => {
     const { simulationIntervalId } = get();

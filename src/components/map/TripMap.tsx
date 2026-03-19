@@ -12,6 +12,7 @@ export default function TripMap() {
   const destination = useTripStore((s) => s.destination);
   const scheduledStops = useTripStore((s) => s.scheduledStops);
   const recommendations = useTripStore((s) => s.recommendations);
+  const currentPosition = useTripStore((s) => s.context.currentPosition);
 
   const recommendedStops = recommendations
     .filter((r) => !r.dismissed)
@@ -26,6 +27,7 @@ export default function TripMap() {
       destination={destination}
       scheduledStops={scheduledStops}
       recommendedStops={recommendedStops}
+      currentPosition={currentPosition}
     />
   );
 }

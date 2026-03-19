@@ -63,7 +63,8 @@ export const CATEGORY_WEIGHTS: Record<StopCategory, CategoryWeights> = {
 
 function computeDistanceScore(distanceMiles: number, maxDistanceMiles: number): number {
   if (maxDistanceMiles <= 0) return 0;
-  return Math.max(0, 1 - distanceMiles / maxDistanceMiles);
+  const normalized = distanceMiles / maxDistanceMiles;
+  return Math.max(0, 1 - normalized * normalized);
 }
 
 function computeRatingScore(rating: number | null): number {
@@ -88,7 +89,7 @@ function computePriceAlignmentScore(
 }
 
 function computeTimeRelevanceScore(stop: Stop, currentTime: Date): number {
-  let score = 0.6;
+  let score = 0.55;
 
   if (stop.openNow === true) score = 1.0;
   else if (stop.openNow === false) return 0.1;
@@ -97,9 +98,14 @@ function computeTimeRelevanceScore(stop: Stop, currentTime: Date): number {
     const hour = currentTime.getHours();
     for (const meal of Object.values(MEAL_TIMES)) {
       if (hour >= meal.start && hour <= meal.end) {
-        score = Math.min(1, score + 0.1);
+        score = Math.min(1, score + 0.2);
         break;
       }
+    }
+  } else if (stop.category === "hotel") {
+    const hour = currentTime.getHours();
+    if (hour >= 20 || hour < 6) {
+      score = Math.min(1, score + 0.25);
     }
   }
 
@@ -150,6 +156,20 @@ function computeWeatherScore(
   if (stop.category === "hotel" || stop.category === "restaurant") return 1.0;
   if (stop.category === "fuel") return 0.6;
   return 0.3;
+}
+
+function computeOperationalScore(stop: Stop): number {
+  if (stop.category === "restaurant" && stop.attributes.category === "restaurant") {
+    const waitMinutes = stop.attributes.estimatedWaitMinutes;
+    if (waitMinutes === null) return 0.75;
+    if (waitMinutes <= 10) return 1.0;
+    if (waitMinutes <= 20) return 0.9;
+    if (waitMinutes <= 35) return 0.7;
+    if (waitMinutes <= 45) return 0.5;
+    return 0.2;
+  }
+
+  return 0.8;
 }
 
 function generateMatchReasons(
@@ -279,12 +299,14 @@ export function scoreAndRankStops(input: ScoringInput): ScoredStop[] {
       weights.timeRelevance * breakdown.timeRelevance +
       weights.brandPreference * breakdown.brandPreference +
       weights.weatherSuitability * breakdown.weatherSuitability;
+    const operationalScore = computeOperationalScore(stop);
+    const adjustedScore = score * operationalScore;
 
     const matchReasons = generateMatchReasons(stop, breakdown, weights);
 
     return {
       ...stop,
-      score,
+      score: adjustedScore,
       scoreBreakdown: breakdown,
       matchReasons,
     };

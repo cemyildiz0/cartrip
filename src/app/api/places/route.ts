@@ -4,11 +4,11 @@ import type { StopCategory } from "@/types";
 const GOOGLE_PLACES_NEARBY_URL =
   "https://maps.googleapis.com/maps/api/place/nearbysearch/json";
 
-const CATEGORY_TO_PLACE_TYPE: Record<StopCategory, string> = {
-  fuel: "gas_station",
-  restaurant: "restaurant",
-  rest: "park",
-  hotel: "lodging",
+const CATEGORY_TO_PLACE_TYPE: Record<StopCategory, { type?: string; keyword?: string }> = {
+  fuel: { type: "gas_station" },
+  restaurant: { type: "restaurant" },
+  rest: { keyword: "rest stop rest area travel center" },
+  hotel: { type: "lodging" },
 };
 
 export async function GET(request: NextRequest) {
@@ -33,8 +33,8 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const placeType = CATEGORY_TO_PLACE_TYPE[category];
-  if (!placeType) {
+  const placeConfig = CATEGORY_TO_PLACE_TYPE[category];
+  if (!placeConfig) {
     return NextResponse.json(
       { stops: [], error: `Invalid category: ${category}` },
       { status: 400 },
@@ -45,9 +45,10 @@ export async function GET(request: NextRequest) {
     const params = new URLSearchParams({
       location: `${lat},${lng}`,
       radius,
-      type: placeType,
       key: apiKey,
     });
+    if (placeConfig.type) params.set("type", placeConfig.type);
+    if (placeConfig.keyword) params.set("keyword", placeConfig.keyword);
 
     const response = await fetch(`${GOOGLE_PLACES_NEARBY_URL}?${params}`);
     const data = await response.json();
@@ -59,43 +60,41 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const stops = (data.results || [])
-      .slice(0, 10)
-      .map(
-        (place: {
-          place_id: string;
-          name: string;
-          geometry: { location: { lat: number; lng: number } };
-          vicinity: string;
-          rating?: number;
-          price_level?: number;
-          photos?: Array<{ photo_reference: string }>;
-          opening_hours?: { open_now: boolean };
-          types?: string[];
-        }) => ({
-          id: place.place_id,
+    const stops = (data.results || []).slice(0, 10).map(
+      (place: {
+        place_id: string;
+        name: string;
+        geometry: { location: { lat: number; lng: number } };
+        vicinity: string;
+        rating?: number;
+        price_level?: number;
+        photos?: Array<{ photo_reference: string }>;
+        opening_hours?: { open_now: boolean };
+        types?: string[];
+      }) => ({
+        id: place.place_id,
+        placeId: place.place_id,
+        category,
+        name: place.name,
+        location: {
+          latLng: place.geometry.location,
+          address: place.vicinity || "",
           placeId: place.place_id,
-          category,
-          name: place.name,
-          location: {
-            latLng: place.geometry.location,
-            address: place.vicinity || "",
-            placeId: place.place_id,
-          },
-          detourDistanceMiles: 0,
-          detourDurationMinutes: 0,
-          rating: place.rating ?? null,
-          priceLevel: place.price_level ?? null,
-          photos: (place.photos || [])
-            .slice(0, 3)
-            .map(
-              (p: { photo_reference: string }) =>
-                `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${p.photo_reference}&key=${apiKey}`,
-            ),
-          openNow: place.opening_hours?.open_now ?? null,
-          attributes: buildAttributes(category, place),
-        }),
-      );
+        },
+        detourDistanceMiles: 0,
+        detourDurationMinutes: 0,
+        rating: place.rating ?? null,
+        priceLevel: place.price_level ?? null,
+        photos: (place.photos || [])
+          .slice(0, 3)
+          .map(
+            (p: { photo_reference: string }) =>
+              `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${p.photo_reference}&key=${apiKey}`,
+          ),
+        openNow: place.opening_hours?.open_now ?? null,
+        attributes: buildAttributes(category, place),
+      }),
+    );
 
     return NextResponse.json({ stops, error: null });
   } catch (error) {
