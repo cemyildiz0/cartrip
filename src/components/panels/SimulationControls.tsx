@@ -91,8 +91,14 @@ export default function SimulationControls() {
     const currentState = useTripStore.getState();
     if (currentState.simulationIntervalId) return;
 
-    const resumeState = resume && simRef
+    const previousSimState = resume && simRef
       ? simRef.getState()
+      : undefined;
+    const resumeState = previousSimState
+      ? {
+          ...previousSimState,
+          fuelRemaining: useTripStore.getState().context.estimatedFuelRemaining,
+        }
       : undefined;
 
     // Set lastTriggeredFetchMiles so we don't re-trigger immediately on resume
