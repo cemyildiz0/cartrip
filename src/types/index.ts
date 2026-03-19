@@ -9,11 +9,8 @@ export interface Location {
   placeId?: string;
 }
 
-export type FuelType = "gasoline" | "diesel" | "electric" | "hybrid";
-
 export interface VehicleProfile {
   name: string;
-  fuelType: FuelType;
   tankCapacityGallons: number;
   fuelEfficiencyMpg: number;
   currentFuelLevel: number;
@@ -24,18 +21,14 @@ export type BudgetLevel = "budget" | "moderate" | "premium";
 
 export interface DiningPreferences {
   cuisineTypes: string[];
-  dietaryRestrictions: string[];
   budgetLevel: BudgetLevel;
 }
 
 export interface LodgingPreferences {
-  minStarRating: number;
-  amenities: string[];
   budgetLevel: BudgetLevel;
 }
 
 export interface UserPreferences {
-  maxDrivingDurationMinutes: number;
   restFrequencyMinutes: number;
   fuelBudgetLevel: BudgetLevel;
   dining: DiningPreferences;

@@ -11,6 +11,7 @@ import type {
   SimulationState,
 } from "@/types";
 import { generateId, getTimeOfDay } from "@/lib/utils";
+import { useUserStore } from "./userStore";
 
 interface TripState {
   status: TripStatus;
@@ -120,14 +121,15 @@ export const useTripStore = create<TripState & TripActions>()((set, get) => ({
   setRouteError: (error) => set({ routeError: error, isLoadingRoute: false }),
 
   startTrip: () =>
-    set({
+    set((state) => ({
       status: "active",
       activePanel: "overview",
       context: {
-        ...get().context,
+        ...state.context,
+        estimatedFuelRemaining: useUserStore.getState().vehicle.currentFuelLevel,
         timeOfDay: getTimeOfDay(new Date()),
       },
-    }),
+    })),
 
   pauseTrip: () => set({ status: "paused" }),
   resumeTrip: () => set({ status: "active" }),

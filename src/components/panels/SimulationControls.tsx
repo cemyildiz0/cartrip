@@ -111,11 +111,27 @@ export default function SimulationControls() {
     simRef = sim;
 
     const routePoints = sim.getRoutePoints();
+    const initialPositionIndex = resumeState?.positionIndex ?? 0;
+    const initialFuelRemaining = resumeState?.fuelRemaining ?? vehicle.currentFuelLevel;
+    const initialDistanceTraveled = resumeState?.distanceTraveledMiles ?? 0;
+    const initialElapsedMinutes = resumeState?.elapsedMinutes ?? 0;
+    const initialTime = new Date(Date.now() + initialElapsedMinutes * 60 * 1000);
+
+    updateContext({
+      currentPosition: routePoints[initialPositionIndex] ?? null,
+      currentSegmentIndex: initialPositionIndex,
+      elapsedDrivingMinutes: initialElapsedMinutes,
+      estimatedFuelRemaining: initialFuelRemaining,
+      distanceTraveledMiles: initialDistanceTraveled,
+      estimatedMilesRemaining: Math.max(0, route.totalDistanceMiles - initialDistanceTraveled),
+      timeOfDay: getTimeOfDay(initialTime),
+    });
+
     setSimulation({
       isRunning: true,
       speed: speedRef.current,
-      simulatedTime: new Date(),
-      positionIndex: resumeState?.positionIndex ?? 0,
+      simulatedTime: initialTime,
+      positionIndex: initialPositionIndex,
       routePoints,
     });
 

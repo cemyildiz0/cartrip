@@ -95,13 +95,10 @@ export function tokenizePreferences(
     }
     case "restaurant": {
       const cuisineTerms = normalizeTerms(preferences.dining.cuisineTypes);
-      const dietaryTerms = normalizeTerms(preferences.dining.dietaryRestrictions);
-      return [...cuisineTerms, ...dietaryTerms, preferences.dining.budgetLevel];
+      return [...cuisineTerms, preferences.dining.budgetLevel];
     }
     case "hotel": {
-      const amenityTerms = normalizeTerms(preferences.lodging.amenities);
-      const starBucket = starRatingToBucket(preferences.lodging.minStarRating);
-      return [...amenityTerms, starBucket, preferences.lodging.budgetLevel];
+      return [preferences.lodging.budgetLevel];
     }
     case "rest": {
       return ["restrooms", "rest"];

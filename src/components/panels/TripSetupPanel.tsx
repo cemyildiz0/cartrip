@@ -11,11 +11,9 @@ import { useTripStore } from "@/store/tripStore";
 import {
   BUDGET_LABELS,
   CUISINE_OPTIONS,
-  DIETARY_OPTIONS,
   GAS_STATION_BRANDS,
-  HOTEL_AMENITY_OPTIONS,
 } from "@/lib/constants";
-import type { BudgetLevel, FuelType } from "@/types";
+import type { BudgetLevel } from "@/types";
 
 export default function TripSetupPanel() {
   const [originInput, setOriginInput] = useState("");
@@ -160,19 +158,6 @@ export default function TripSetupPanel() {
               value={vehicle.name}
               onChange={(e) => setVehicle({ name: e.target.value })}
             />
-            <Select
-              label="Fuel Type"
-              value={vehicle.fuelType}
-              onChange={(e) =>
-                setVehicle({ fuelType: e.target.value as FuelType })
-              }
-              options={[
-                { value: "gasoline", label: "Gasoline" },
-                { value: "diesel", label: "Diesel" },
-                { value: "hybrid", label: "Hybrid" },
-                { value: "electric", label: "Electric" },
-              ]}
-            />
             <div className="grid grid-cols-2 gap-3">
               <Input
                 label="Tank Size (gal)"
@@ -241,32 +226,18 @@ export default function TripSetupPanel() {
         </button>
         {showPreferences && (
           <div className="border-t border-stone-100 p-4 flex flex-col gap-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="Max Drive (min)"
-                type="number"
-                value={preferences.maxDrivingDurationMinutes}
-                onChange={(e) =>
-                  setPreferences({
-                    maxDrivingDurationMinutes: Number(e.target.value),
-                  })
-                }
-                min={30}
-                step={15}
-              />
-              <Input
-                label="Break Every (min)"
-                type="number"
-                value={preferences.restFrequencyMinutes}
-                onChange={(e) =>
-                  setPreferences({
-                    restFrequencyMinutes: Number(e.target.value),
-                  })
-                }
-                min={30}
-                step={15}
-              />
-            </div>
+            <Input
+              label="Break Every (min)"
+              type="number"
+              value={preferences.restFrequencyMinutes}
+              onChange={(e) =>
+                setPreferences({
+                  restFrequencyMinutes: Number(e.target.value),
+                })
+              }
+              min={30}
+              step={15}
+            />
 
             <Select
               label="Fuel Budget"
@@ -326,34 +297,6 @@ export default function TripSetupPanel() {
 
             <div>
               <label className="text-xs font-medium text-stone-600 mb-1.5 block">
-                Dietary Restrictions
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {DIETARY_OPTIONS.map((diet) => (
-                  <button
-                    key={diet}
-                    type="button"
-                    className={`rounded-full px-3 py-1.5 md:px-2.5 md:py-1 text-xs font-medium transition-colors ${
-                      preferences.dining.dietaryRestrictions.includes(diet)
-                        ? "bg-brand-100 text-brand-700 border border-brand-200"
-                        : "bg-stone-50 text-stone-500 border border-stone-200 hover:bg-stone-100 hover:text-stone-600"
-                    }`}
-                    onClick={() => {
-                      const current = preferences.dining.dietaryRestrictions;
-                      const updated = current.includes(diet)
-                        ? current.filter((d) => d !== diet)
-                        : [...current, diet];
-                      setDiningPreferences({ dietaryRestrictions: updated });
-                    }}
-                  >
-                    {diet}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-stone-600 mb-1.5 block">
                 Preferred Gas Brands
               </label>
               <div className="flex flex-wrap gap-1.5">
@@ -393,48 +336,6 @@ export default function TripSetupPanel() {
                 label,
               }))}
             />
-
-            <Input
-              label="Min Star Rating"
-              type="number"
-              value={preferences.lodging.minStarRating}
-              onChange={(e) =>
-                setLodgingPreferences({
-                  minStarRating: Number(e.target.value),
-                })
-              }
-              min={1}
-              max={5}
-              step={1}
-            />
-
-            <div>
-              <label className="text-xs font-medium text-stone-600 mb-1.5 block">
-                Hotel Amenities
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {HOTEL_AMENITY_OPTIONS.map((amenity) => (
-                  <button
-                    key={amenity}
-                    type="button"
-                    className={`rounded-full px-3 py-1.5 md:px-2.5 md:py-1 text-xs font-medium transition-colors ${
-                      preferences.lodging.amenities.includes(amenity)
-                        ? "bg-brand-100 text-brand-700 border border-brand-200"
-                        : "bg-stone-50 text-stone-500 border border-stone-200 hover:bg-stone-100 hover:text-stone-600"
-                    }`}
-                    onClick={() => {
-                      const current = preferences.lodging.amenities;
-                      const updated = current.includes(amenity)
-                        ? current.filter((a) => a !== amenity)
-                        : [...current, amenity];
-                      setLodgingPreferences({ amenities: updated });
-                    }}
-                  >
-                    {amenity}
-                  </button>
-                ))}
-              </div>
-            </div>
 
             <label className="flex items-center gap-2 text-sm text-stone-600 cursor-pointer">
               <input

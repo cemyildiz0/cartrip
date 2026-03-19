@@ -3,7 +3,6 @@ import { persist } from "zustand/middleware";
 import type {
   BudgetLevel,
   DiningPreferences,
-  FuelType,
   LodgingPreferences,
   UserPreferences,
   VehicleProfile,
@@ -18,13 +17,11 @@ interface UserState {
 
 interface UserActions {
   setVehicle: (vehicle: Partial<VehicleProfile>) => void;
-  setFuelType: (fuelType: FuelType) => void;
   setTankCapacity: (gallons: number) => void;
   setFuelEfficiency: (mpg: number) => void;
   setCurrentFuelLevel: (level: number) => void;
   setSafetyBuffer: (percent: number) => void;
   setPreferences: (prefs: Partial<UserPreferences>) => void;
-  setMaxDrivingDuration: (minutes: number) => void;
   setRestFrequency: (minutes: number) => void;
   setFuelBudget: (level: BudgetLevel) => void;
   setDiningPreferences: (dining: Partial<DiningPreferences>) => void;
@@ -46,9 +43,6 @@ export const useUserStore = create<UserState & UserActions>()(
         set((state) => ({
           vehicle: { ...state.vehicle, ...partial },
         })),
-
-      setFuelType: (fuelType) =>
-        set((state) => ({ vehicle: { ...state.vehicle, fuelType } })),
 
       setTankCapacity: (gallons) =>
         set((state) => ({
@@ -73,14 +67,6 @@ export const useUserStore = create<UserState & UserActions>()(
       setPreferences: (partial) =>
         set((state) => ({
           preferences: { ...state.preferences, ...partial },
-        })),
-
-      setMaxDrivingDuration: (minutes) =>
-        set((state) => ({
-          preferences: {
-            ...state.preferences,
-            maxDrivingDurationMinutes: minutes,
-          },
         })),
 
       setRestFrequency: (minutes) =>

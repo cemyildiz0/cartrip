@@ -47,7 +47,6 @@ export const CATEGORY_MAX_DETOUR_MILES = {
 
 export const DEFAULT_VEHICLE: VehicleProfile = {
   name: "",
-  fuelType: "gasoline",
   tankCapacityGallons: 14,
   fuelEfficiencyMpg: 30,
   currentFuelLevel: 1.0,
@@ -55,17 +54,13 @@ export const DEFAULT_VEHICLE: VehicleProfile = {
 };
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
-  maxDrivingDurationMinutes: 180,
   restFrequencyMinutes: 120,
   fuelBudgetLevel: "moderate",
   dining: {
     cuisineTypes: [],
-    dietaryRestrictions: [],
     budgetLevel: "moderate",
   },
   lodging: {
-    minStarRating: 3,
-    amenities: [],
     budgetLevel: "moderate",
   },
   preferredBrands: [],
@@ -94,27 +89,6 @@ export const CUISINE_OPTIONS = [
   "Pizza",
   "Burgers",
   "Coffee & Cafe",
-] as const;
-
-export const DIETARY_OPTIONS = [
-  "Vegetarian",
-  "Vegan",
-  "Gluten-Free",
-  "Halal",
-  "Kosher",
-  "Dairy-Free",
-  "Nut-Free",
-] as const;
-
-export const HOTEL_AMENITY_OPTIONS = [
-  "WiFi",
-  "Pool",
-  "Breakfast Included",
-  "Parking",
-  "Pet-Friendly",
-  "Gym",
-  "Restaurant",
-  "Room Service",
 ] as const;
 
 export const GAS_STATION_BRANDS = [
